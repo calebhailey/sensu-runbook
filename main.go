@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -51,8 +52,8 @@ var (
 			Env:       "SENSU_RUNBOOK_JOB_ID",
 			Argument:  "id",
 			Shorthand: "i",
-			Default:   uuid.New().String(),
-			Usage:     "The ID or name to use for the job (i.e. the name assigned to the check; defaults to a random UUIDv4)",
+			Default:   "",
+			Usage:     "The ID or name to use for the job (i.e. defaults to a random UUIDv4)",
 			Value:     &config.JobID,
 		},
 		&sensu.PluginConfigOption{
@@ -136,11 +137,14 @@ func main() {
 }
 
 func checkArgs(event *types.Event) (int, error) {
-	if len(config.Command) == 0 {
-		return sensu.CheckStateWarning, fmt.Errorf("--command or SENSU_RUNBOOK_COMMAND environment variable is required")
-	}
-	if len(config.Subscriptions) == 0 {
-		return sensu.CheckStateWarning, fmt.Errorf("--subscriptions or SENSU_RUNBOOK_SUBSCRIPTIONS environment variable is required")
+	if len(config.SensuApiUrl) == 0 {
+		return sensu.CheckStateCritical, errors.New("--sensu-api-url flag or $SENSU_API_URL environment variable must be set")
+	} else if len(config.Namespace) == 0 {
+		return sensu.CheckStateCritical, errors.New("--namespace flag or $SENSU_NAMESPACE environment variable must be set")
+	} else if len(config.Command) == 0 {
+		return sensu.CheckStateWarning, errors.New("--command flag or $SENSU_RUNBOOK_COMMAND environment variable must be set")
+	} else if len(config.Subscriptions) == 0 {
+		return sensu.CheckStateWarning, errors.New("--subscriptions flag or $SENSU_RUNBOOK_SUBSCRIPTIONS environment variable must be set")
 	}
 	return sensu.CheckStateOK, nil
 }
@@ -162,15 +166,14 @@ func executePlaybook(event *types.Event) (int, error) {
 		if err != nil {
 			return sensu.CheckStateCritical, nil
 		} else {
-			time.Sleep(5 * time.Second)
-			err = getJobResults(&job)
 			return sensu.CheckStateOK, nil
 		}
 	}
 }
 
 func generateCheckConfig() (types.CheckConfig, error) {
-	// Build CheckConfig object
+	// Build CheckConfig object 
+	config.JobID = uuid.New().String()
 	var timeout, _ = strconv.Atoi(config.Timeout)
 	var labels = make(map[string]string)
 	var job = types.CheckConfig{

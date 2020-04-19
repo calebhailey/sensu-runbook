@@ -20,19 +20,19 @@ import (
 // Config represents the check plugin config.
 type Config struct {
 	sensu.PluginConfig
-	Command string
-	Timeout string
-	Assets string 
-	Subscriptions string 
-	Namespace string
-	JobID string 
-	SensuApiUrl string
-	SensuAccessToken string 
+	Namespace          string
+	JobID              string
+	Command            string
+	Subscriptions      string
+	Timeout            string
+	RuntimeAssets      string
+	SensuApiUrl        string
+	SensuAccessToken   string
 	SensuTrustedCaFile string
 }
 
 type JobRequest struct {
-	Check string `json:"check"`
+	Check         string   `json:"check"`
 	Subscriptions []string `json:"subscriptions"`
 }
 
@@ -46,6 +46,15 @@ var (
 	}
 
 	options = []*sensu.PluginConfigOption{
+		&sensu.PluginConfigOption{
+			Path:      "id",
+			Env:       "SENSU_RUNBOOK_JOB_ID",
+			Argument:  "id",
+			Shorthand: "i",
+			Default:   uuid.New().String(),
+			Usage:     "The ID or name to use for the job (i.e. the name assigned to the check; defaults to a random UUIDv4)",
+			Value:     &config.JobID,
+		},
 		&sensu.PluginConfigOption{
 			Path:      "command",
 			Env:       "SENSU_RUNBOOK_COMMAND",
@@ -65,13 +74,13 @@ var (
 			Value:     &config.Command,
 		},
 		&sensu.PluginConfigOption{
-			Path:      "assets",
+			Path:      "runtime-assets",
 			Env:       "SENSU_RUNBOOK_ASSETS",
-			Argument:  "assets",
+			Argument:  "runtime-assets",
 			Shorthand: "a",
 			Default:   "",
 			Usage:     "Comma-separated list of assets to distribute with the command(s)",
-			Value:     &config.Assets,
+			Value:     &config.RuntimeAssets,
 		},
 		&sensu.PluginConfigOption{
 			Path:      "subscriptions",
@@ -143,7 +152,7 @@ func executePlaybook(event *types.Event) (int, error) {
 		fmt.Errorf("ERROR: %s\n", err)
 		return sensu.CheckStateCritical, err
 	} else {
-		log.Printf("registering runbook job ID %s/%s with --command %s", job.Namespace, job.Name, config.Command)
+		log.Printf("registering runbook job ID %s/%s with --command %s\n", job.Namespace, job.Name, config.Command)
 		err = createJob(&job)
 		if err != nil {
 			return sensu.CheckStateCritical, err
@@ -153,30 +162,32 @@ func executePlaybook(event *types.Event) (int, error) {
 		if err != nil {
 			return sensu.CheckStateCritical, nil
 		} else {
+			time.Sleep(5 * time.Second)
+			err = getJobResults(&job)
 			return sensu.CheckStateOK, nil
 		}
 	}
 }
 
 func generateCheckConfig() (types.CheckConfig, error) {
-	// Build CheckConfig object 
-	timeout, _ := strconv.Atoi(config.Timeout)
-	labels := make(map[string]string)
-	config.JobID = uuid.New().String()
+	// Build CheckConfig object
+	var timeout, _ = strconv.Atoi(config.Timeout)
+	var labels = make(map[string]string)
 	var job = types.CheckConfig{
-		Publish: false,
-		Subscriptions: []string{"none"},
-		Command: config.Command,
-		Interval: 10,
-		Timeout: uint32(timeout),
 		ObjectMeta: types.ObjectMeta{
-			Name: config.JobID,
+			Name:      config.JobID,
 			Namespace: config.Namespace,
-			Labels: labels,
+			Labels:    labels,
 		},
+		Command:       config.Command,
+		Publish:       false,
+		Subscriptions: []string{"none"},
+		Interval:      10,
+		Timeout:       uint32(timeout),
 	}
-	job.ObjectMeta.Labels["check_type"] = "runbook"
-	job.ObjectMeta.Labels["source"] = "Sensu Runbook"
+	if len(config.RuntimeAssets) > 0 {
+		job.RuntimeAssets = strings.Split(config.RuntimeAssets, ",")
+	}
 	return job, nil
 }
 
@@ -269,7 +280,7 @@ func createJob(job *types.CheckConfig) error {
 
 func executeJob(job *types.CheckConfig) error {
 	var job_request = JobRequest{
-		Check: job.Name,
+		Check:         job.Name,
 		Subscriptions: strings.Split(config.Subscriptions, ","),
 	}
 	postBody, err := json.Marshal(job_request)

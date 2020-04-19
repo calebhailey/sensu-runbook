@@ -87,12 +87,13 @@ Execute commands and custom scripts on Sensu Agent nodes. Sensu Go offers severa
     version     Print the version number of this plugin
 
   Flags:
-    -a, --assets string                  Comma-separated list of assets to distribute with the command(s)
     -c, --command string                 The command that should be executed by the Sensu Go agent(s)
     -h, --help                           help for sensu-runbook
-    -n, --namespace string               Sensu Namespace to perform the runbook automation (defaults to $SENSU_NAMESPACE) (default "sensu-system")
-        --sensu-access-token string      Sensu API Access Token (defaults to $SENSU_ACCESS_TOKEN)
-        --sensu-api-url string           Sensu API URL (defaults to $SENSU_API_URL) (default "https://demo.sensu.io:8080")
+    -i, --id string                      The ID or name to use for the job (i.e. defaults to a random UUIDv4)
+    -n, --namespace string               Sensu Namespace to perform the runbook automation (defaults to $SENSU_NAMESPACE)
+    -a, --runtime-assets string          Comma-separated list of assets to distribute with the command(s)
+        --sensu-access-token string      Sensu API Access Token (defaults to $SENSU_ACCESS_TOKEN) 
+        --sensu-api-url string           Sensu API URL (defaults to $SENSU_API_URL)
         --sensu-trusted-ca-file string   Sensu API Trusted Certificate Authority File (defaults to $SENSU_TRUSTED_CA_FILE)
     -s, --subscriptions string           Comma-separated list of subscriptions to execute the command(s) on
     -t, --timeout string                 Command execution timeout, in seconds (default "10")
@@ -132,11 +133,13 @@ feedback is welcome and appreciated!
 
 ### Roadmap 
 
-- Publish asset to Bonsai
-- Add support for `--runtime_assets`
-- Add support for `--handlers`
-- Add support for Assets (`--url` and `--sha512`)
-- Write a blog post!
+- [x] Publish asset to Bonsai
+- [x] Add support for `--runtime_assets`
+- [ ] Add support for `--handlers`
+- [ ] Add support for private assets (`--url` and `--sha512`)
+- [ ] Generate a link to view the results in the dashboard 
+- [ ] Automatically show results after job execution! 
+- [ ] Write a blog post!
 
 ## Contributing
 

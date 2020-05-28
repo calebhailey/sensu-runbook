@@ -2,10 +2,10 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -27,11 +27,12 @@ type Config struct {
 	Subscriptions      string
 	Timeout            string
 	RuntimeAssets      string
-	SensuApiUrl        string
+	SensuAPIUrl        string
 	SensuAccessToken   string
 	SensuTrustedCaFile string
 }
 
+// JobRequest represents a job request.
 type JobRequest struct {
 	Check         string   `json:"check"`
 	Subscriptions []string `json:"subscriptions"`
@@ -47,7 +48,7 @@ var (
 	}
 
 	options = []*sensu.PluginConfigOption{
-		&sensu.PluginConfigOption{
+		{
 			Path:      "id",
 			Env:       "SENSU_RUNBOOK_JOB_ID",
 			Argument:  "id",
@@ -56,7 +57,7 @@ var (
 			Usage:     "The ID or name to use for the job (i.e. defaults to a random UUIDv4)",
 			Value:     &config.JobID,
 		},
-		&sensu.PluginConfigOption{
+		{
 			Path:      "command",
 			Env:       "SENSU_RUNBOOK_COMMAND",
 			Argument:  "command",
@@ -65,7 +66,7 @@ var (
 			Usage:     "The command that should be executed by the Sensu Go agent(s)",
 			Value:     &config.Command,
 		},
-		&sensu.PluginConfigOption{
+		{
 			Path:      "timeout",
 			Env:       "SENSU_RUNBOOK_TIMEOUT",
 			Argument:  "timeout",
@@ -74,7 +75,7 @@ var (
 			Usage:     "Command execution timeout, in seconds",
 			Value:     &config.Command,
 		},
-		&sensu.PluginConfigOption{
+		{
 			Path:      "runtime-assets",
 			Env:       "SENSU_RUNBOOK_ASSETS",
 			Argument:  "runtime-assets",
@@ -83,7 +84,7 @@ var (
 			Usage:     "Comma-separated list of assets to distribute with the command(s)",
 			Value:     &config.RuntimeAssets,
 		},
-		&sensu.PluginConfigOption{
+		{
 			Path:      "subscriptions",
 			Env:       "SENSU_RUNBOOK_SUBSCRIPTIONS",
 			Argument:  "subscriptions",
@@ -92,7 +93,7 @@ var (
 			Usage:     "Comma-separated list of subscriptions to execute the command(s) on",
 			Value:     &config.Subscriptions,
 		},
-		&sensu.PluginConfigOption{
+		{
 			Path:      "namespace",
 			Env:       "SENSU_NAMESPACE", // provided by the sensuctl command plugin execution environment
 			Argument:  "namespace",
@@ -101,16 +102,16 @@ var (
 			Usage:     "Sensu Namespace to perform the runbook automation (defaults to $SENSU_NAMESPACE)",
 			Value:     &config.Namespace,
 		},
-		&sensu.PluginConfigOption{
+		{
 			Path:      "sensu-api-url",
 			Env:       "SENSU_API_URL", // provided by the sensuctl command plugin execution environment
 			Argument:  "sensu-api-url",
 			Shorthand: "",
 			Default:   "",
 			Usage:     "Sensu API URL (defaults to $SENSU_API_URL)",
-			Value:     &config.SensuApiUrl,
+			Value:     &config.SensuAPIUrl,
 		},
-		&sensu.PluginConfigOption{
+		{
 			Path:      "sensu-access-token",
 			Env:       "SENSU_ACCESS_TOKEN", // provided by the sensuctl command plugin execution environment
 			Argument:  "sensu-access-token",
@@ -119,7 +120,7 @@ var (
 			Usage:     "Sensu API Access Token (defaults to $SENSU_ACCESS_TOKEN)",
 			Value:     &config.SensuAccessToken,
 		},
-		&sensu.PluginConfigOption{
+		{
 			Path:      "sensu-trusted-ca-file",
 			Env:       "SENSU_TRUSTED_CA_FILE", // provided by the sensuctl command plugin execution environment
 			Argument:  "sensu-trusted-ca-file",
@@ -137,7 +138,7 @@ func main() {
 }
 
 func checkArgs(event *types.Event) (int, error) {
-	if len(config.SensuApiUrl) == 0 {
+	if len(config.SensuAPIUrl) == 0 {
 		return sensu.CheckStateCritical, errors.New("--sensu-api-url flag or $SENSU_API_URL environment variable must be set")
 	} else if len(config.Namespace) == 0 {
 		return sensu.CheckStateCritical, errors.New("--namespace flag or $SENSU_NAMESPACE environment variable must be set")
@@ -153,26 +154,22 @@ func executePlaybook(event *types.Event) (int, error) {
 	// TODO: use the sensu-plugin-sdk HTTP client (reference: https://github.com/sensu/sensu-ec2-handler/blob/master/main.go#L12)
 	job, err := generateCheckConfig()
 	if err != nil {
-		fmt.Errorf("ERROR: %s\n", err)
-		return sensu.CheckStateCritical, err
-	} else {
-		log.Printf("registering runbook job ID %s/%s with --command %s\n", job.Namespace, job.Name, config.Command)
-		err = createJob(&job)
-		if err != nil {
-			return sensu.CheckStateCritical, err
-		} else {
-			err = executeJob(&job)
-		}
-		if err != nil {
-			return sensu.CheckStateCritical, nil
-		} else {
-			return sensu.CheckStateOK, nil
-		}
+		return sensu.CheckStateCritical, fmt.Errorf("ERROR: %s", err)
 	}
+	log.Printf("registering runbook job ID %s/%s with --command %s\n", job.Namespace, job.Name, config.Command)
+	err = createJob(&job)
+	if err != nil {
+		return sensu.CheckStateCritical, err
+	}
+	err = executeJob(&job)
+	if err != nil {
+		return sensu.CheckStateCritical, nil
+	}
+	return sensu.CheckStateOK, nil
 }
 
 func generateCheckConfig() (types.CheckConfig, error) {
-	// Build CheckConfig object 
+	// Build CheckConfig object
 	config.JobID = uuid.New().String()
 	var timeout, _ = strconv.Atoi(config.Timeout)
 	var labels = make(map[string]string)
@@ -194,11 +191,12 @@ func generateCheckConfig() (types.CheckConfig, error) {
 	return job, nil
 }
 
+// LoadCACerts loads the system cert pool.
 func LoadCACerts(path string) (*x509.CertPool, error) {
 	rootCAs, err := x509.SystemCertPool()
 	if err != nil {
-		log.Fatalf("ERROR: failed to load system cert pool: %s", err)
-		return nil, err
+		log.Printf("ERROR: failed to load system cert pool: %s", err)
+		rootCAs = x509.NewCertPool()
 	}
 	if rootCAs == nil {
 		rootCAs = x509.NewCertPool()
@@ -208,14 +206,13 @@ func LoadCACerts(path string) (*x509.CertPool, error) {
 		if err != nil {
 			log.Fatalf("ERROR: failed to read CA file (%s): %s", path, err)
 			return nil, err
-		} else {
-			rootCAs.AppendCertsFromPEM(certs)
 		}
+		rootCAs.AppendCertsFromPEM(certs)
 	}
 	return rootCAs, nil
 }
 
-func initHttpClient() *http.Client {
+func initHTTPClient() *http.Client {
 	certs, err := LoadCACerts(config.SensuTrustedCaFile)
 	if err != nil {
 		log.Fatalf("ERROR: %s\n", err)
@@ -241,7 +238,7 @@ func createJob(job *types.CheckConfig) error {
 	req, err := http.NewRequest(
 		"POST",
 		fmt.Sprintf("%s/api/core/v2/namespaces/%s/checks",
-			config.SensuApiUrl,
+			config.SensuAPIUrl,
 			config.Namespace,
 		),
 		body,
@@ -249,7 +246,7 @@ func createJob(job *types.CheckConfig) error {
 	if err != nil {
 		log.Fatalf("ERROR: %s\n", err)
 	}
-	var httpClient *http.Client = initHttpClient()
+	var httpClient *http.Client = initHTTPClient()
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", config.SensuAccessToken))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
@@ -282,11 +279,11 @@ func createJob(job *types.CheckConfig) error {
 }
 
 func executeJob(job *types.CheckConfig) error {
-	var job_request = JobRequest{
+	var jobRequest = JobRequest{
 		Check:         job.Name,
 		Subscriptions: strings.Split(config.Subscriptions, ","),
 	}
-	postBody, err := json.Marshal(job_request)
+	postBody, err := json.Marshal(jobRequest)
 	if err != nil {
 		log.Fatal("ERROR: ", err)
 	}
@@ -294,7 +291,7 @@ func executeJob(job *types.CheckConfig) error {
 	req, err := http.NewRequest(
 		"POST",
 		fmt.Sprintf("%s/api/core/v2/namespaces/%s/checks/%s/execute",
-			config.SensuApiUrl,
+			config.SensuAPIUrl,
 			config.Namespace,
 			config.JobID,
 		),
@@ -303,7 +300,7 @@ func executeJob(job *types.CheckConfig) error {
 	if err != nil {
 		log.Fatalf("ERROR: %s\n", err)
 	}
-	var httpClient *http.Client = initHttpClient()
+	var httpClient *http.Client = initHTTPClient()
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", config.SensuAccessToken))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
@@ -325,12 +322,8 @@ func executeJob(job *types.CheckConfig) error {
 		if err != nil {
 			log.Fatalf("ERROR: %s\n", err)
 			return err
-		} else {
-			fmt.Printf("%s\n", string(b))
-			return nil
 		}
+		fmt.Printf("%s\n", string(b))
+		return nil
 	}
-
-	return err
 }
-

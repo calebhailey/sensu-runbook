@@ -7,6 +7,10 @@ Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Fixed
+- Fixed system root pool bug on Windows.
+- Fixed linter, style, and format errors.
+
 ## [0.0.1] - 2000-01-01
 
 ### Added

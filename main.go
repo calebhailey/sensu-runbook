@@ -53,7 +53,7 @@ var (
 			Env:       "SENSU_RUNBOOK_JOB_ID",
 			Argument:  "id",
 			Shorthand: "i",
-			Default:   "",
+			Default:   uuid.New().String(),
 			Usage:     "The ID or name to use for the job (i.e. defaults to a random UUIDv4)",
 			Value:     &config.JobID,
 		},
@@ -170,7 +170,6 @@ func executePlaybook(event *types.Event) (int, error) {
 
 func generateCheckConfig() (types.CheckConfig, error) {
 	// Build CheckConfig object
-	config.JobID = uuid.New().String()
 	var timeout, _ = strconv.Atoi(config.Timeout)
 	var labels = make(map[string]string)
 	var job = types.CheckConfig{

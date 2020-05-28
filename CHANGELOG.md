@@ -10,6 +10,7 @@ Versioning](http://semver.org/spec/v2.0.0.html).
 ### Fixed
 - Fixed system root pool bug on Windows.
 - Fixed linter, style, and format errors.
+- Fixed bug where `--id` would always be overwritten by a random UUID.
 
 ## [0.0.1] - 2000-01-01
 

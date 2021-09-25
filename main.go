@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/sensu-community/sensu-plugin-sdk/sensu"
-	"github.com/sensu/sensu-go/types"
+	"github.com/sensu/sensu-plugin-sdk/sensu"
+	v2 "github.com/sensu/sensu-go/api/core/v2"
 )
 
 // Config represents the check plugin config.
@@ -30,12 +30,16 @@ type Config struct {
 	SensuAPIUrl        string
 	SensuAccessToken   string
 	SensuTrustedCaFile string
+	Labels             string
+	Annotations        string
 }
 
 // JobRequest represents a job request.
 type JobRequest struct {
-	Check         string   `json:"check"`
-	Subscriptions []string `json:"subscriptions"`
+	Check         string            `json:"check"`
+	Subscriptions []string          `json:"subscriptions"`
+	Labels        map[string]string `json:"labels"`
+	Annotations   map[string]string `json:"annotations"`
 }
 
 var (
@@ -54,6 +58,7 @@ var (
 			Argument:  "id",
 			Shorthand: "i",
 			Default:   uuid.New().String(),
+			Secret:    true,
 			Usage:     "The ID or name to use for the job (i.e. defaults to a random UUIDv4)",
 			Value:     &config.JobID,
 		},
@@ -103,6 +108,22 @@ var (
 			Value:     &config.Namespace,
 		},
 		{
+			Path:      "labels",
+			Argument:  "labels",
+			Shorthand: "",
+			Default:   "",
+			Usage:     "Comma-separated key=value labels to append to the check config and resulting event(s)",
+			Value:     &config.Labels,
+		},
+		{
+			Path:      "annotations",
+			Argument:  "annotations",
+			Shorthand: "",
+			Default:   "request=sensu-runbook",
+			Usage:     "Comma-separated key=value annotations to append to the check config and resulting event(s)",
+			Value:     &config.Annotations,
+		},
+		{
 			Path:      "sensu-api-url",
 			Env:       "SENSU_API_URL", // provided by the sensuctl command plugin execution environment
 			Argument:  "sensu-api-url",
@@ -117,6 +138,7 @@ var (
 			Argument:  "sensu-access-token",
 			Shorthand: "",
 			Default:   "",
+			Secret:    true,
 			Usage:     "Sensu API Access Token (defaults to $SENSU_ACCESS_TOKEN)",
 			Value:     &config.SensuAccessToken,
 		},
@@ -137,7 +159,7 @@ func main() {
 	plugin.Execute()
 }
 
-func checkArgs(event *types.Event) (int, error) {
+func checkArgs(event *v2.Event) (int, error) {
 	if len(config.SensuAPIUrl) == 0 {
 		return sensu.CheckStateCritical, errors.New("--sensu-api-url flag or $SENSU_API_URL environment variable must be set")
 	} else if len(config.Namespace) == 0 {
@@ -150,7 +172,7 @@ func checkArgs(event *types.Event) (int, error) {
 	return sensu.CheckStateOK, nil
 }
 
-func executePlaybook(event *types.Event) (int, error) {
+func executePlaybook(event *v2.Event) (int, error) {
 	// TODO: use the sensu-plugin-sdk HTTP client (reference: https://github.com/sensu/sensu-ec2-handler/blob/master/main.go#L12)
 	job, err := generateCheckConfig()
 	if err != nil {
@@ -168,15 +190,17 @@ func executePlaybook(event *types.Event) (int, error) {
 	return sensu.CheckStateOK, nil
 }
 
-func generateCheckConfig() (types.CheckConfig, error) {
+func generateCheckConfig() (v2.CheckConfig, error) {
 	// Build CheckConfig object
 	var timeout, _ = strconv.Atoi(config.Timeout)
-	var labels = make(map[string]string)
-	var job = types.CheckConfig{
-		ObjectMeta: types.ObjectMeta{
-			Name:      config.JobID,
-			Namespace: config.Namespace,
-			Labels:    labels,
+	var labels = parseKvStringSlice(strings.Split(config.Labels,","))
+	var annotations = parseKvStringSlice(strings.Split(config.Annotations,","))
+	var job = v2.CheckConfig{
+		ObjectMeta: v2.ObjectMeta{
+			Name:        config.JobID,
+			Namespace:   config.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Command:       config.Command,
 		Publish:       false,
@@ -188,6 +212,24 @@ func generateCheckConfig() (types.CheckConfig, error) {
 		job.RuntimeAssets = strings.Split(config.RuntimeAssets, ",")
 	}
 	return job, nil
+}
+
+// Parse a slice of strings containing key=value pairs
+func parseKvStringSlice(s []string) map[string]string {
+	var m = make(map[string]string)
+	for _, kvString := range s {
+		i := strings.Split(kvString, "=")
+		if len(i) > 1 {
+			k := strings.TrimSpace(i[0])
+			v := strings.TrimSpace(i[1])
+			if len(strings.Split(k, " ")) > 1 {
+				fmt.Printf("WARNING: invalid key name: \"%s\" (did you mean to use --add-all?)\n", k)
+			} else {
+				m[k] = v
+			}
+		}
+	}
+	return m
 }
 
 // LoadCACerts loads the system cert pool.
@@ -228,7 +270,7 @@ func initHTTPClient() *http.Client {
 	return client
 }
 
-func createJob(job *types.CheckConfig) error {
+func createJob(job *v2.CheckConfig) error {
 	postBody, err := json.Marshal(job)
 	if err != nil {
 		log.Fatal("ERROR: ", err)
@@ -277,7 +319,7 @@ func createJob(job *types.CheckConfig) error {
 	return err
 }
 
-func executeJob(job *types.CheckConfig) error {
+func executeJob(job *v2.CheckConfig) error {
 	var jobRequest = JobRequest{
 		Check:         job.Name,
 		Subscriptions: strings.Split(config.Subscriptions, ","),

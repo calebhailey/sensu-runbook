@@ -125,7 +125,7 @@ To install a specific version, simply append the version number:
 sensuctl command install calebhailey/sensu-runbook:0.3.0
 ```
 
-### Upgrade `sensuctl` command
+### Upgrade the `sensuctl` command
 
 Command upgrades are not directly supported by `sensuctl` at this time, so commands must be deleted and resinstalled to get new versions:
 
